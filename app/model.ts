@@ -11,7 +11,14 @@ export const riserSchema = z.object({startLevel:z.number().int().min(1).max(17),
   if(r.installedSections && (new Set(r.installedSections).size!==r.installedSections.length || r.installedSections.some(s=>s<r.startLevel||s>=r.endLevel)))c.addIssue({code:'custom',message:'Installed sections must be unique and within the planned route.'});
 });
 export type RiserTracking = z.infer<typeof riserSchema>;
-export const activitySchema = z.object({...base, projectId:required, name:required, area:short, responsible:short, start:date, end:date, status:z.enum(['Not started','In progress','Blocked','Complete']), mode:z.enum(['quantity','manual','floor']), riser:riserSchema.optional(), unit:short, planned:z.number().finite().min(0), completed:z.number().finite().min(0), percent:z.number().finite().min(0).max(100), notes }).superRefine((x,c) => {
+export const prerequisiteSchema=z.discriminatedUnion('type',[
+  z.object({type:z.literal('activity'),activityId:z.string().min(1).max(100)}).strict(),
+  z.object({type:z.literal('riserSection'),activityId:z.string().min(1).max(100),sectionStartLevel:z.number().int().min(1).max(17)}).strict()
+]);
+export type Prerequisite=z.infer<typeof prerequisiteSchema>;
+export function prerequisiteKey(p:Prerequisite){return `${p.type}:${p.activityId}:${p.type==='riserSection'?p.sectionStartLevel:''}`;}
+export const prerequisitesSchema=z.array(prerequisiteSchema).max(100).refine(items=>new Set(items.map(prerequisiteKey)).size===items.length,'Duplicate prerequisites are not allowed.');
+export const activitySchema = z.object({...base, projectId:required, name:required, area:short, responsible:short, start:date, end:date, status:z.enum(['Not started','In progress','Blocked','Complete']), mode:z.enum(['quantity','manual','floor']), riser:riserSchema.optional(), prerequisites:prerequisitesSchema.optional(), unit:short, planned:z.number().finite().min(0), completed:z.number().finite().min(0), percent:z.number().finite().min(0).max(100), notes }).superRefine((x,c) => {
   if(x.start && x.end && x.start>x.end) c.addIssue({code:'custom',path:['end'],message:'Finish date must be on or after start date.'});
   if(x.mode==='quantity' && (x.planned<=0 || !x.unit)) c.addIssue({code:'custom',path:['planned'],message:'Quantity tracking needs a planned quantity above zero and a unit.'});
   if(x.mode==='quantity' && x.completed>x.planned) c.addIssue({code:'custom',path:['completed'],message:'Completed quantity cannot exceed planned quantity.'});

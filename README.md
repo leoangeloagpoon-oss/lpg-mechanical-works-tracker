@@ -8,6 +8,7 @@ A private project tracker for LPG mechanical installation, built with React, Typ
 - Grouped activities: activity type → floor → individual flat, plus a full register.
 - Bulk creation with duplicate protection and bulk updates in batches of up to 100. Riser routes and installed ranges can be entered together, with separate installed sections and corrections.
 - Quantity, manual percentage, or calculated riser floor-section tracking, with project averages, overdue work, and blocked work.
+- Configurable whole-activity and riser-section prerequisites, bulk link editing, readiness filters, and review flags after upstream corrections.
 - ChatGPT sign-in with owner-scoped server reads and writes.
 - Responsive English interface with keyboard controls.
 
@@ -38,6 +39,7 @@ With the local development server running, run:
 node scripts/test-api.mjs
 node scripts/test-bulk.mjs
 node scripts/test-risers.mjs
+node scripts/test-prerequisites.mjs
 ```
 
 The API tests use disposable local records. Run them only against the local server. `--keep` on the bulk test retains its local fixtures for manual browser checks; the default removes fixtures after testing.
@@ -50,6 +52,9 @@ The API tests use disposable local records. Run them only against the local serv
 | `app/activity-workspace.tsx` | Grouped activities and bulk entry forms |
 | `app/activity-tools.ts` | Grouping, generation, bulk validation and retry queue |
 | `app/riser-fields.tsx` | Riser route editor and installed floor-section checklist |
+| `app/prerequisites.ts` | Shared readiness and graph validation |
+| `app/prerequisite-fields.tsx` | Searchable prerequisite editor and readiness display |
+| `app/activity-store.ts` | Atomic project-scoped activity graph saves |
 | `app/model.ts` | Record types, validation and progress calculations |
 | `app/api/records/route.ts` | Authenticated individual record operations |
 | `app/api/activities/bulk/route.ts` | Authenticated bulk activity operations |
@@ -66,3 +71,6 @@ The existing application is hosted privately through Sites. Publishing this sour
 The public `.openai/hosting.json` retains the `DB` storage binding but omits the original `project_id`. To update the existing deployment, its owner must use the original private Sites checkout and supported Sites publication workflow. For a new deployment, register a new Sites project and use its returned identity. Other hosting platforms require their own authentication and D1 configuration; authenticated identity headers must come from a trusted gateway.
 
 See [the retained Sites starter guide](docs/SITES_STARTER.md) for runtime details and third-party notices in `vendor/` and `scripts/vite/`.
+
+
+See [Activity prerequisites](docs/activity-prerequisites.md) for usage, data rules, and verification coverage.

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { activitySchema, progress, overdue, riserRouteSchema, isRiser, floorStatus, type Activity } from './model';
+import { activitySchema, progress, overdue, riserRouteSchema, isRiser, floorStatus, prerequisitesSchema, prerequisiteKey, type Activity } from './model';
 
 export const workNames = ['Inlet piping', 'Gas meter assembly', 'Outlet piping'];
 export function activityParts(a: Pick<Activity, 'name' | 'area'> & {riser?:Activity['riser']}) {
@@ -31,12 +31,17 @@ const date = z.string().refine(s => s === '' || (/^\d{4}-\d{2}-\d{2}$/.test(s) &
 export const floorRangeSchema=z.object({from:z.number().int().min(1).max(17),to:z.number().int().min(2).max(18),installed:z.boolean()}).strict().refine(r=>r.to>r.from,'The To floor must be above the From floor.');
 export const bulkPatchSchema = z.object({ percent: z.number().finite().min(0).max(100).optional(),
   riserRoute:riserRouteSchema.optional(),floorRange:floorRangeSchema.optional(),
+  prerequisiteEdit:z.object({action:z.enum(['append','replace','remove','clear']),links:prerequisitesSchema}).strict().refine(p=>p.action==='clear'||p.links.length>0,'Choose at least one prerequisite.').optional(),
   status: z.enum(['Not started', 'In progress', 'Blocked', 'Complete']).optional(), responsible: text.optional(), start: date.optional(), end: date.optional()
 }).strict().refine(p => Object.keys(p).length > 0, 'Choose at least one field to update.');
 export type BulkPatch = z.infer<typeof bulkPatchSchema>;
 export function applyBulkPatch(record: Activity, patch: BulkPatch): Activity {
-  const { percent, riserRoute, floorRange, ...fields } = patch;
+  const { percent, riserRoute, floorRange, prerequisiteEdit, ...fields } = patch;
   const next = { ...record, ...fields };
+  if(prerequisiteEdit){
+    const {action,links}=prerequisiteEdit;const keys=new Set(links.map(prerequisiteKey));
+    next.prerequisites=action==='clear'?[]:action==='replace'?links:action==='remove'?(record.prerequisites||[]).filter(p=>!keys.has(prerequisiteKey(p))):[...new Map([...(record.prerequisites||[]),...links].map(p=>[prerequisiteKey(p),p])).values()];
+  }
   if(riserRoute || floorRange){
     if(!isRiser(record))throw Error('Floor entry can only be applied to risers.');
     if(riserRoute)next.riser={...riserRoute,installedSections:record.riser?.installedSections??null};

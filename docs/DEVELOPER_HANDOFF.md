@@ -44,3 +44,7 @@ Progress is the number of unique installed sections divided by the number of pla
 The bulk update patch supports `riserRoute: {startLevel, endLevel}` and `floorRange: {from, to, installed}`. Installed ranges are added as a set, and correction ranges remove only the specified sections. Repeated requests are idempotent. Every range must fit every selected riser's route; invalid mixed-route requests fail before any updates. Route shortening cannot silently discard installed sections. Existing nonzero progress without floor details must be reconciled in the individual editor before bulk conversion.
 
 `node scripts/test-risers.mjs` exercises calculations, unknown ranges, separate installation ranges, corrections, persistence, stable IDs, inspection links, access controls, and mixed-route validation using disposable local records.
+
+## Activity prerequisites
+
+Read [Activity prerequisites](activity-prerequisites.md) before editing readiness or completion logic. Shared graph validation serves both individual and bulk endpoints. Activity saves use a project-scoped compare-and-set inside an atomic D1 batch; preserve that concurrency guard when changing project metadata. No new table migration or production activity links are included in this update.

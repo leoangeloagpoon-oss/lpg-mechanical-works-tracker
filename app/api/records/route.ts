@@ -1,6 +1,8 @@
 import { env } from 'cloudflare:workers';
 import { getChatGPTUser } from '../../chatgpt-auth';
 import { projectSchema,activitySchema,inspectionSchema,actionSchema, type Kind } from '../../model';
+import { activityContext, saveActivityChanges } from '../../activity-store';
+import { ActivityRuleError } from '../../prerequisites';
 export const dynamic='force-dynamic';
 const kinds = ['projects','activities','inspections','actions'] as const;
 const schemas = {projects:projectSchema,activities:activitySchema,inspections:inspectionSchema,actions:actionSchema};
@@ -32,13 +34,18 @@ export async function POST(request:Request) {
       if(kind==='actions') { const inspection=await owned('inspections',data.inspectionId,user.userId); if(!inspection || inspection.project_id!==data.projectId) return fail('Choose an inspection from this project.'); if(existing && existing.inspection_id!==data.inspectionId) return fail('The linked inspection cannot be changed.'); }
     }
     const db=env.DB!;
+    if(kind==='activities'){
+      const context=await activityContext(db,user.userId,data.projectId);
+      if(parsed.data.id&&!context.activities.some(a=>a.id===data.id))return fail('Record not found.',404);
+      await saveActivityChanges(context,[data]);return json({record:data});
+    }
     const values:Record<string,unknown>={id:data.id,owner:user.userId};
     if(kind!=='projects') values.project_id=data.projectId;
     if(kind==='inspections') values.activity_id=data.activityId;
     if(kind==='actions') values.inspection_id=data.inspectionId;
     values.data=JSON.stringify(data);
     const cols=Object.keys(values);
-    const statement=existing?db.prepare(`UPDATE ${kind} SET data=? WHERE id=? AND owner=?`).bind(values.data,data.id,user.userId):db.prepare(`INSERT INTO ${kind} (${cols.join(',')}) VALUES (${cols.map(()=>'?').join(',')})`).bind(...Object.values(values));
+    const statement=existing?(kind==='projects'?db.prepare("UPDATE projects SET data=CASE WHEN json_type(data,'$.__activityGuard') IS NULL THEN ? ELSE json_set(?,'$.__activityGuard',json_extract(data,'$.__activityGuard')) END WHERE id=? AND owner=?").bind(values.data,values.data,data.id,user.userId):db.prepare(`UPDATE ${kind} SET data=? WHERE id=? AND owner=?`).bind(values.data,data.id,user.userId)):db.prepare(`INSERT INTO ${kind} (${cols.join(',')}) VALUES (${cols.map(()=>'?').join(',')})`).bind(...Object.values(values));
     const batch=[statement];
     if(kind==='projects' && !existing && body.templates) {
       if(!Array.isArray(body.templates) || body.templates.length>30 || body.templates.some((s:any)=>typeof s!=='string'||!s.trim()||s.length>200)) return fail('Activity template names must contain 1–200 characters.');
@@ -48,16 +55,17 @@ export async function POST(request:Request) {
       }
     }
     await db.batch(batch); return json({record:data});
-  } catch { return fail('This record could not be saved. Your changes are still in the form; please try again.',503); }
+  } catch(e) { if(e instanceof ActivityRuleError)return fail(e.message,e.status);return fail('This record could not be saved. Your changes are still in the form; please try again.',503); }
 }
 export async function DELETE(request:Request) {
   const user=await getChatGPTUser(); if(!user) return fail('Sign in to delete records.',401);
   if(new URL(request.url).origin!==request.headers.get('origin')) return fail('Invalid request origin.',403);
   try { const body:any=await request.json(); const kind=body.kind as Kind;
     if(!kinds.includes(kind)||typeof body.id!=='string') return fail('Invalid record.');
-    if(!await owned(kind,body.id,user.userId)) return fail('Record not found.',404);
+    const existing=await owned(kind,body.id,user.userId);if(!existing) return fail('Record not found.',404);
+    if(kind==='activities'){const context=await activityContext(env.DB!,user.userId,existing.project_id!);await saveActivityChanges(context,[],[body.id]);return json({deleted:true});}
     await env.DB!.prepare(`DELETE FROM ${kind} WHERE id=? AND owner=?`).bind(body.id,user.userId).run();
     return json({deleted:true});
-  } catch {return fail('This record could not be deleted. Please try again.',503);}
+  } catch(e) {if(e instanceof ActivityRuleError)return fail(e.message,e.status);return fail('This record could not be deleted. Please try again.',503);}
 }
 
