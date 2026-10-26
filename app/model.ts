@@ -53,4 +53,5 @@ export function progressText(a:Parameters<typeof progress>[0]){return a.mode==='
 export function floorStatus(a:Parameters<typeof progress>[0],oldStatus:string){return oldStatus==='Blocked'?'Blocked':progress(a)===100?'Complete':progress(a)>0?'In progress':'Not started';}
 export function projectProgress(activities:Activity[]) { return activities.length ? activities.reduce((s,a)=>s+progress(a),0)/activities.length : null; }
 export function today() { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+export function daysFromToday(days:number) { const d=new Date(); d.setDate(d.getDate()+days); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 export function overdue(a:Activity,day=today()) { return !!a.end && a.end<day && progress(a)<100; }

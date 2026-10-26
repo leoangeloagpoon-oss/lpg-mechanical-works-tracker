@@ -27,9 +27,14 @@ Open the local URL printed by the server (normally `http://127.0.0.1:5173`). The
 
 ## Checks
 
+The CI workflow in `.github/workflows/ci.yml` runs the same checks on every push and pull request.
+
 ```sh
 npx tsc --noEmit
+npm run lint
 node scripts/test-model.mjs
+node scripts/test-tools.mjs
+node scripts/test-readiness.mjs
 npm run build
 ```
 
@@ -48,8 +53,11 @@ The API tests use disposable local records. Run them only against the local serv
 
 | Location | Purpose |
 | --- | --- |
-| `app/tracker.tsx` | Dashboard, projects, inspection register, individual editors |
-| `app/activity-workspace.tsx` | Grouped activities and bulk entry forms |
+| `app/tracker.tsx` | Dashboard, projects, inspection register, corrective-action register |
+| `app/editor.tsx` | Individual record editor dialog (projects, activities, inspections, actions) |
+| `app/activity-workspace.tsx` | Grouped activities, full register, and selection tools |
+| `app/bulk-dialog.tsx` | Bulk add and bulk update forms with preview and batch retry |
+| `app/record-meta.ts` | Shared record labels, status options, and date formatting |
 | `app/activity-tools.ts` | Grouping, generation, bulk validation and retry queue |
 | `app/riser-fields.tsx` | Riser route editor and installed floor-section checklist |
 | `app/prerequisites.ts` | Shared readiness and graph validation |
@@ -70,7 +78,7 @@ The existing application is hosted privately through Sites. Publishing this sour
 
 The public `.openai/hosting.json` retains the `DB` storage binding but omits the original `project_id`. To update the existing deployment, its owner must use the original private Sites checkout and supported Sites publication workflow. For a new deployment, register a new Sites project and use its returned identity. Other hosting platforms require their own authentication and D1 configuration; authenticated identity headers must come from a trusted gateway.
 
-See [the retained Sites starter guide](docs/SITES_STARTER.md) for runtime details and third-party notices in `vendor/` and `scripts/vite/`.
+See [the retained Sites starter guide](docs/SITES_STARTER.md) for runtime details and third-party notices in `scripts/vite/`.
 
 
 See [Activity prerequisites](docs/activity-prerequisites.md) for usage, data rules, and verification coverage.

@@ -51,7 +51,7 @@ export function applyBulkPatch(record: Activity, patch: BulkPatch): Activity {
       if(record.mode!=='floor' && progress(record)>0 && record.riser?.installedSections==null)throw Error(`${record.name}: existing progress needs floor details. Edit this riser to confirm its installed sections first.`);
       if(record.mode==='quantity')throw Error(`${record.name}: edit this quantity-tracked riser individually before using floor entry.`);
       const sections=new Set(next.riser.installedSections||[]);
-      for(let i=floorRange.from;i<floorRange.to;i++)floorRange.installed?sections.add(i):sections.delete(i);
+      for(let i=floorRange.from;i<floorRange.to;i++){if(floorRange.installed)sections.add(i);else sections.delete(i);}
       next.riser={...next.riser,installedSections:[...sections].sort((a,b)=>a-b)};next.mode='floor';
     }
     if(next.mode==='floor'&&!patch.status)next.status=floorStatus(next,record.status) as Activity['status'];

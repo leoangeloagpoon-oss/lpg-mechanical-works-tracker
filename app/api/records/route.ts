@@ -8,7 +8,10 @@ const kinds = ['projects','activities','inspections','actions'] as const;
 const schemas = {projects:projectSchema,activities:activitySchema,inspections:inspectionSchema,actions:actionSchema};
 const json=(data:unknown,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
 const fail=(message:string,status=400)=>json({error:message},status);
-async function owned(kind:Kind,id:string,owner:string) { return env.DB!.prepare(`SELECT * FROM ${kind} WHERE id=? AND owner=?`).bind(id,owner).first<{id:string;data:string;project_id?:string;activity_id?:string;inspection_id?:string}>(); }
+async function owned(kind:Kind,id:string,owner:string) {
+  const cols=kind==='projects'?'id':kind==='activities'?'id, project_id':kind==='inspections'?'id, project_id, activity_id':'id, project_id, inspection_id';
+  return env.DB!.prepare(`SELECT ${cols} FROM ${kind} WHERE id=? AND owner=?`).bind(id,owner).first<{id:string;data?:string;project_id?:string;activity_id?:string;inspection_id?:string}>();
+}
 export async function GET() {
   const user=await getChatGPTUser(); if(!user) return fail('Sign in to view your records.',401);
   try {
@@ -57,15 +60,41 @@ export async function POST(request:Request) {
     await db.batch(batch); return json({record:data});
   } catch(e) { if(e instanceof ActivityRuleError)return fail(e.message,e.status);return fail('This record could not be saved. Your changes are still in the form; please try again.',503); }
 }
+async function cascadeCounts(kind:Kind,id:string,owner:string){
+  const db=env.DB!;
+  if(kind==='projects'){
+    const rows=await db.batch([
+      db.prepare('SELECT COUNT(*) AS c FROM activities WHERE project_id=? AND owner=?').bind(id,owner),
+      db.prepare('SELECT COUNT(*) AS c FROM inspections WHERE project_id=? AND owner=?').bind(id,owner),
+      db.prepare('SELECT COUNT(*) AS c FROM actions WHERE project_id=? AND owner=?').bind(id,owner),
+    ]);
+    return {activities:Number((rows[0].results[0] as {c:number})?.c||0),inspections:Number((rows[1].results[0] as {c:number})?.c||0),actions:Number((rows[2].results[0] as {c:number})?.c||0)};
+  }
+  if(kind==='activities'){
+    const rows=await db.batch([
+      db.prepare('SELECT COUNT(*) AS c FROM inspections WHERE activity_id=? AND owner=?').bind(id,owner),
+      db.prepare('SELECT COUNT(*) AS c FROM actions WHERE inspection_id IN (SELECT id FROM inspections WHERE activity_id=? AND owner=?) AND owner=?').bind(id,owner,owner),
+    ]);
+    return {inspections:Number((rows[0].results[0] as {c:number})?.c||0),actions:Number((rows[1].results[0] as {c:number})?.c||0)};
+  }
+  if(kind==='inspections'){
+    const row=await db.prepare('SELECT COUNT(*) AS c FROM actions WHERE inspection_id=? AND owner=?').bind(id,owner).first<{c:number}>();
+    return {actions:Number(row?.c||0)};
+  }
+  return {};
+}
 export async function DELETE(request:Request) {
   const user=await getChatGPTUser(); if(!user) return fail('Sign in to delete records.',401);
   if(new URL(request.url).origin!==request.headers.get('origin')) return fail('Invalid request origin.',403);
   try { const body:any=await request.json(); const kind=body.kind as Kind;
     if(!kinds.includes(kind)||typeof body.id!=='string') return fail('Invalid record.');
     const existing=await owned(kind,body.id,user.userId);if(!existing) return fail('Record not found.',404);
-    if(kind==='activities'){const context=await activityContext(env.DB!,user.userId,existing.project_id!);await saveActivityChanges(context,[],[body.id]);return json({deleted:true});}
+    // Count linked records before deleting so the response reports what the
+    // foreign-key cascade removes; D1 enforces ON DELETE CASCADE by default.
+    const cascaded=await cascadeCounts(kind,body.id,user.userId);
+    if(kind==='activities'){const context=await activityContext(env.DB!,user.userId,existing.project_id!);await saveActivityChanges(context,[],[body.id]);return json({deleted:true,cascaded});}
     await env.DB!.prepare(`DELETE FROM ${kind} WHERE id=? AND owner=?`).bind(body.id,user.userId).run();
-    return json({deleted:true});
+    return json({deleted:true,cascaded});
   } catch(e) {if(e instanceof ActivityRuleError)return fail(e.message,e.status);return fail('This record could not be deleted. Please try again.',503);}
 }
 
