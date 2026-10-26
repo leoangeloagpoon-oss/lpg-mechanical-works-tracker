@@ -34,3 +34,13 @@ Each request validates before its database batch. The browser saves larger selec
 6. Hand tested changes to the owner for publication through Sites. This repository is not configured to deploy automatically.
 
 The public snapshot has a fresh history and no original Sites project identity, credentials, database contents, local caches, or generated deployment bundle.
+
+## Riser floor tracking
+
+Activities may use `mode: 'floor'` and optional `riser` metadata containing `startLevel`, `endLevel`, and `installedSections`. Levels 1–17 are floors; level 18 is the roof above the 17th floor. An installed section is identified by its lower level, so sections `[1, 2]` describe installation from the 1st to the 3rd floor.
+
+Progress is the number of unique installed sections divided by the number of planned sections. Every section has equal weight, and percentages are displayed to one decimal place. A null installed-section list means that the installed range has not been recorded; planned-route metadata can be attached without replacing existing manual progress.
+
+The bulk update patch supports `riserRoute: {startLevel, endLevel}` and `floorRange: {from, to, installed}`. Installed ranges are added as a set, and correction ranges remove only the specified sections. Repeated requests are idempotent. Every range must fit every selected riser's route; invalid mixed-route requests fail before any updates. Route shortening cannot silently discard installed sections. Existing nonzero progress without floor details must be reconciled in the individual editor before bulk conversion.
+
+`node scripts/test-risers.mjs` exercises calculations, unknown ranges, separate installation ranges, corrections, persistence, stable IDs, inspection links, access controls, and mixed-route validation using disposable local records.
